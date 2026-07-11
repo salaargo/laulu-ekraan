@@ -53,14 +53,11 @@
     .btn-secondary { background: #0f3460; }
     .file-btn input { display: none; }
 
-    .hint {
-      margin-top: 1rem;
-      font-size: 0.85rem;
-      color: #888;
-      line-height: 1.5;
-      max-width: 360px;
-      margin-left: auto;
-      margin-right: auto;
+    .hint.warn {
+      color: #f0a500;
+      background: #16213e;
+      padding: 1rem;
+      border-radius: 8px;
     }
 
     .sharing-panel { display: none; }
@@ -169,9 +166,12 @@
         Vali PDF fail
         <input type="file" id="pdf-input" accept=".pdf">
       </label>
-      <p class="hint">
-        Ekraani jagamisel vali telefonis „Kogu ekraan“, seejärel ava MobileSheets või muu rakendus.
-        Androidis töötab kõige paremini. iPhone ei toeta seda brauseris.
+      <p class="hint" id="desktop-hint">
+        Ekraani jagamine töötab arvutis (Chrome/Edge). Telefonis brauser seda kahjuks ei toeta.
+      </p>
+      <p class="hint warn" id="mobile-hint" style="display:none">
+        <strong>Telefonis ekraani jagamine ei tööta</strong> — Apple ja Google ei luba brauseritel teiste rakenduste (nt MobileSheets) ekraani jagada.
+        Kasuta PDF valikut või ava admin arvutis.
       </p>
     </div>
 
@@ -238,6 +238,28 @@
 
     const MAX_WIDTH = 1280;
     const FRAME_INTERVAL = 400;
+
+    function isMobileDevice() {
+      return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    }
+
+    function canShareScreen() {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+    }
+
+    function setupDeviceUI() {
+      const mobile = isMobileDevice();
+      const canShare = canShareScreen();
+
+      if (mobile || !canShare) {
+        screenBtn.disabled = true;
+        screenBtn.style.opacity = '0.45';
+        document.getElementById('mobile-hint').style.display = 'block';
+        document.getElementById('desktop-hint').style.display = 'none';
+      }
+    }
+
+    setupDeviceUI();
 
     function getViewerBaseUrl() {
       return window.location.origin;
@@ -315,10 +337,14 @@
     }
 
     async function startScreenShare() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        statusEl.textContent = 'Ekraani jagamine pole toetatud';
-        statusEl.className = 'status error';
-        alert('Sinu brauser ei toeta ekraani jagamist. Proovi Android Chrome\'i või kasuta PDF valikut.');
+      if (!canShareScreen()) {
+        alert(
+          'Ekraani jagamine telefonis ei ole võimalik.\n\n' +
+          'Põhjus: brauserid (sh Chrome) ei toeta seda nutiseadmes.\n\n' +
+          'Lahendused:\n' +
+          '1. Ekspordi MobileSheetsist PDF ja kasuta "Vali PDF fail"\n' +
+          '2. Ava admin arvutis ja jaga sealt ekraani'
+        );
         return;
       }
 
