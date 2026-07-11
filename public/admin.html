@@ -28,30 +28,40 @@
       z-index: 10;
     }
     header h1 { font-size: 1.1rem; }
-    .status {
-      font-size: 0.85rem;
-      color: #4ecca3;
-    }
+    .status { font-size: 0.85rem; color: #4ecca3; }
     .status.waiting { color: #f0a500; }
+    .status.error { color: #e94560; }
     .container { padding: 1rem; max-width: 800px; margin: 0 auto; }
 
-    .setup {
-      text-align: center;
-      padding: 3rem 1rem;
-    }
-    .setup p { color: #aaa; margin-bottom: 1.5rem; }
+    .setup { text-align: center; padding: 2rem 1rem; }
+    .setup p { color: #aaa; margin-bottom: 1.25rem; line-height: 1.5; }
 
-    .file-btn {
-      display: inline-block;
-      background: #e94560;
-      color: white;
-      padding: 1rem 2rem;
+    .btn {
+      display: block;
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto 0.75rem;
+      padding: 1rem 1.5rem;
+      border: none;
       border-radius: 10px;
-      cursor: pointer;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 600;
+      cursor: pointer;
+      color: white;
     }
+    .btn-primary { background: #e94560; }
+    .btn-secondary { background: #0f3460; }
     .file-btn input { display: none; }
+
+    .hint {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: #888;
+      line-height: 1.5;
+      max-width: 360px;
+      margin-left: auto;
+      margin-right: auto;
+    }
 
     .sharing-panel { display: none; }
     .sharing-panel.active { display: block; }
@@ -77,27 +87,40 @@
       margin-top: 0.75rem;
       color: #4ecca3;
     }
-    .viewer-count {
+    .viewer-count { margin-top: 0.5rem; font-size: 0.9rem; color: #888; }
+    .mode-label {
       margin-top: 0.5rem;
-      font-size: 0.9rem;
-      color: #888;
-    }
-    .network-hint {
-      margin-top: 0.5rem;
-      font-size: 0.8rem;
-      color: #f0a500;
-      line-height: 1.4;
+      font-size: 0.85rem;
+      color: #4ecca3;
     }
 
-    .pdf-view {
-      background: white;
+    .preview-box {
+      background: #000;
       border-radius: 8px;
       overflow: hidden;
       margin-bottom: 1rem;
       display: flex;
       justify-content: center;
+      align-items: center;
+      min-height: 120px;
     }
-    #pdf-canvas { max-width: 100%; height: auto; }
+    #screen-video, #pdf-canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    #screen-video { width: 100%; }
+    #pdf-canvas { background: white; }
+
+    .screen-hint {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: #ccc;
+      line-height: 1.5;
+    }
 
     .controls {
       display: flex;
@@ -140,11 +163,16 @@
 
   <div class="container">
     <div id="setup" class="setup">
-      <p>Vali laulusõnade PDF fail, et alustada jagamist.</p>
-      <label class="file-btn">
-        Vali PDF
+      <p>Jaga oma seadme ekraani (nt MobileSheets) või vali PDF fail.</p>
+      <button class="btn btn-primary" id="screen-btn">Jaga ekraani</button>
+      <label class="btn btn-secondary file-btn">
+        Vali PDF fail
         <input type="file" id="pdf-input" accept=".pdf">
       </label>
+      <p class="hint">
+        Ekraani jagamisel vali telefonis „Kogu ekraan“, seejärel ava MobileSheets või muu rakendus.
+        Androidis töötab kõige paremini. iPhone ei toeta seda brauseris.
+      </p>
     </div>
 
     <div id="sharing" class="sharing-panel">
@@ -153,14 +181,19 @@
         <div id="qrcode"></div>
         <div class="room-code" id="room-code"></div>
         <div class="viewer-count" id="viewer-count">0 vaatajat</div>
-        <div class="network-hint" id="network-hint" style="display:none"></div>
+        <div class="mode-label" id="mode-label"></div>
       </div>
 
-      <div class="pdf-view">
-        <canvas id="pdf-canvas"></canvas>
+      <div id="screen-hint" class="screen-hint" style="display:none">
+        Ekraan on jagamisel. Ava nüüd MobileSheets või muu rakendus — vaatajad näevad seda, mida sinu ekraanil on.
       </div>
 
-      <div class="controls">
+      <div class="preview-box">
+        <video id="screen-video" autoplay muted playsinline style="display:none"></video>
+        <canvas id="pdf-canvas" style="display:none"></canvas>
+      </div>
+
+      <div id="pdf-controls" class="controls" style="display:none">
         <button id="prev-btn">◀ Eelmine</button>
         <span class="page-info" id="page-info">1 / 1</span>
         <button id="next-btn">Järgmine ▶</button>
@@ -178,94 +211,165 @@
     const statusEl = document.getElementById('status');
     const setupEl = document.getElementById('setup');
     const sharingEl = document.getElementById('sharing');
+    const screenBtn = document.getElementById('screen-btn');
     const pdfInput = document.getElementById('pdf-input');
+    const screenVideo = document.getElementById('screen-video');
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
+    const captureCanvas = document.createElement('canvas');
+    const captureCtx = captureCanvas.getContext('2d');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const pageInfo = document.getElementById('page-info');
     const stopBtn = document.getElementById('stop-btn');
     const viewerCountEl = document.getElementById('viewer-count');
+    const modeLabel = document.getElementById('mode-label');
+    const screenHint = document.getElementById('screen-hint');
+    const pdfControls = document.getElementById('pdf-controls');
 
     let roomId = null;
+    let mode = null;
     let pdfDoc = null;
     let currentPage = 1;
     let totalPages = 0;
     let renderTask = null;
+    let screenStream = null;
+    let frameTimer = null;
 
-    async function getViewerBaseUrl() {
-      const origin = window.location.origin;
-      if (!origin.includes('localhost') && !origin.includes('127.0.0.1')) {
-        return origin;
+    const MAX_WIDTH = 1280;
+    const FRAME_INTERVAL = 400;
+
+    function getViewerBaseUrl() {
+      return window.location.origin;
+    }
+
+    function showSharingUI(id, label) {
+      roomId = id;
+      document.getElementById('room-code').textContent = id;
+      modeLabel.textContent = label;
+
+      const viewerUrl = `${getViewerBaseUrl()}/view/${id}`;
+      document.getElementById('qrcode').innerHTML = '';
+      new QRCode(document.getElementById('qrcode'), {
+        text: viewerUrl,
+        width: 180,
+        height: 180,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+      });
+
+      setupEl.style.display = 'none';
+      sharingEl.classList.add('active');
+    }
+
+    function createRoom() {
+      return new Promise((resolve) => {
+        socket.emit('create-room', resolve);
+      });
+    }
+
+    function sendFrameFromCanvas(sourceCanvas) {
+      if (!roomId) return;
+
+      const scale = Math.min(1, MAX_WIDTH / sourceCanvas.width);
+      const w = Math.round(sourceCanvas.width * scale);
+      const h = Math.round(sourceCanvas.height * scale);
+
+      captureCanvas.width = w;
+      captureCanvas.height = h;
+      captureCtx.drawImage(sourceCanvas, 0, 0, w, h);
+
+      const image = captureCanvas.toDataURL('image/jpeg', 0.75);
+      socket.emit('frame', { roomId, image });
+    }
+
+    function sendFrameFromVideo() {
+      if (!roomId || !screenVideo.videoWidth) return;
+
+      captureCanvas.width = screenVideo.videoWidth;
+      captureCanvas.height = screenVideo.videoHeight;
+      captureCtx.drawImage(screenVideo, 0, 0);
+      sendFrameFromCanvas(captureCanvas);
+    }
+
+    function startFrameCapture() {
+      stopFrameCapture();
+      sendFrameFromVideo();
+      frameTimer = setInterval(sendFrameFromVideo, FRAME_INTERVAL);
+    }
+
+    function stopFrameCapture() {
+      if (frameTimer) {
+        clearInterval(frameTimer);
+        frameTimer = null;
+      }
+    }
+
+    function stopScreenStream() {
+      stopFrameCapture();
+      if (screenStream) {
+        screenStream.getTracks().forEach((track) => track.stop());
+        screenStream = null;
+      }
+      screenVideo.srcObject = null;
+    }
+
+    async function startScreenShare() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        statusEl.textContent = 'Ekraani jagamine pole toetatud';
+        statusEl.className = 'status error';
+        alert('Sinu brauser ei toeta ekraani jagamist. Proovi Android Chrome\'i või kasuta PDF valikut.');
+        return;
       }
 
       try {
-        const res = await fetch('/api/host-info');
-        const data = await res.json();
-        if (data.local.length > 0) {
-          document.getElementById('network-hint').style.display = 'block';
-          document.getElementById('network-hint').textContent =
-            'Telefonid peavad olema samas WiFi võrgus. QR link: ' + data.local[0];
-          return data.local[0];
-        }
-      } catch (_) {}
+        const { roomId: id } = await createRoom();
+        mode = 'screen';
+        showSharingUI(id, 'Režiim: ekraani jagamine');
 
-      document.getElementById('network-hint').style.display = 'block';
-      document.getElementById('network-hint').textContent =
-        'Localhost ei tööta telefoniga. Ava admin leht võrgu IP aadressil.';
-      return origin;
-    }
+        screenHint.style.display = 'block';
+        pdfControls.style.display = 'none';
+        screenVideo.style.display = 'block';
+        canvas.style.display = 'none';
 
-    socket.on('connect', () => {
-      statusEl.textContent = 'Ühendatud';
-      statusEl.classList.remove('waiting');
-    });
-
-    socket.on('disconnect', () => {
-      statusEl.textContent = 'Ühendus katkenud';
-      statusEl.classList.add('waiting');
-    });
-
-    socket.on('viewer-count', (count) => {
-      viewerCountEl.textContent = count === 1 ? '1 vaataja' : `${count} vaatajat`;
-    });
-
-    pdfInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const arrayBuffer = await file.arrayBuffer();
-      pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      totalPages = pdfDoc.numPages;
-      currentPage = 1;
-
-      socket.emit('create-room', async ({ roomId: id }) => {
-        roomId = id;
-        document.getElementById('room-code').textContent = id;
-
-        const baseUrl = await getViewerBaseUrl();
-        const viewerUrl = `${baseUrl}/view/${id}`;
-        document.getElementById('qrcode').innerHTML = '';
-        new QRCode(document.getElementById('qrcode'), {
-          text: viewerUrl,
-          width: 180,
-          height: 180,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 10 },
+          audio: false,
         });
 
-        setupEl.style.display = 'none';
-        sharingEl.classList.add('active');
-        renderPage(currentPage);
-      });
-    });
+        screenVideo.srcObject = screenStream;
+        await screenVideo.play();
+
+        screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+          stopSharing();
+        });
+
+        startFrameCapture();
+        statusEl.textContent = 'Ekraan jagamisel';
+        statusEl.className = 'status';
+      } catch (err) {
+        if (roomId) {
+          socket.emit('stop-sharing', { roomId });
+          roomId = null;
+        }
+        setupEl.style.display = 'block';
+        sharingEl.classList.remove('active');
+
+        if (err.name !== 'NotAllowedError') {
+          statusEl.textContent = 'Viga ekraani jagamisel';
+          statusEl.className = 'status error';
+          alert('Ekraani jagamine ebaõnnestus: ' + err.message);
+        } else {
+          statusEl.textContent = 'Ühendatud';
+          statusEl.className = 'status';
+        }
+      }
+    }
 
     async function renderPage(pageNum) {
       if (!pdfDoc) return;
 
-      if (renderTask) {
-        renderTask.cancel();
-      }
+      if (renderTask) renderTask.cancel();
 
       const page = await pdfDoc.getPage(pageNum);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -280,14 +384,54 @@
       prevBtn.disabled = pageNum <= 1;
       nextBtn.disabled = pageNum >= totalPages;
 
-      sendFrame();
+      sendFrameFromCanvas(canvas);
     }
 
-    function sendFrame() {
-      if (!roomId) return;
-      const image = canvas.toDataURL('image/jpeg', 0.85);
-      socket.emit('frame', { roomId, image });
+    function stopSharing() {
+      stopScreenStream();
+      if (roomId) {
+        socket.emit('stop-sharing', { roomId });
+        roomId = null;
+      }
+      location.href = '/admin';
     }
+
+    socket.on('connect', () => {
+      statusEl.textContent = 'Ühendatud';
+      statusEl.className = 'status';
+    });
+
+    socket.on('disconnect', () => {
+      statusEl.textContent = 'Ühendus katkenud';
+      statusEl.className = 'status waiting';
+    });
+
+    socket.on('viewer-count', (count) => {
+      viewerCountEl.textContent = count === 1 ? '1 vaataja' : `${count} vaatajat`;
+    });
+
+    screenBtn.addEventListener('click', startScreenShare);
+
+    pdfInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      totalPages = pdfDoc.numPages;
+      currentPage = 1;
+      mode = 'pdf';
+
+      const { roomId: id } = await createRoom();
+      showSharingUI(id, 'Režiim: PDF');
+
+      screenHint.style.display = 'none';
+      pdfControls.style.display = 'flex';
+      screenVideo.style.display = 'none';
+      canvas.style.display = 'block';
+
+      await renderPage(currentPage);
+    });
 
     prevBtn.addEventListener('click', () => {
       if (currentPage > 1) {
@@ -303,12 +447,7 @@
       }
     });
 
-    stopBtn.addEventListener('click', () => {
-      if (roomId) {
-        socket.emit('stop-sharing', { roomId });
-      }
-      location.href = '/';
-    });
+    stopBtn.addEventListener('click', stopSharing);
   </script>
 </body>
 </html>

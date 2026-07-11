@@ -9,6 +9,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true },
+  maxHttpBufferSize: 1e7,
 });
 
 const rooms = new Map();
