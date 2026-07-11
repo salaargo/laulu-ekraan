@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin – Laulu ekraan</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+    }
+    header {
+      background: #16213e;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 1.1rem; }
+    .status {
+      font-size: 0.85rem;
+      color: #4ecca3;
+    }
+    .status.waiting { color: #f0a500; }
+    .container { padding: 1rem; max-width: 800px; margin: 0 auto; }
+
+    .setup {
+      text-align: center;
+      padding: 3rem 1rem;
+    }
+    .setup p { color: #aaa; margin-bottom: 1.5rem; }
+
+    .file-btn {
+      display: inline-block;
+      background: #e94560;
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .file-btn input { display: none; }
+
+    .sharing-panel { display: none; }
+    .sharing-panel.active { display: block; }
+
+    .qr-section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .qr-section h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #aaa; }
+    #qrcode {
+      display: inline-block;
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .room-code {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      margin-top: 0.75rem;
+      color: #4ecca3;
+    }
+    .viewer-count {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #888;
+    }
+    .network-hint {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #f0a500;
+      line-height: 1.4;
+    }
+
+    .pdf-view {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      display: flex;
+      justify-content: center;
+    }
+    #pdf-canvas { max-width: 100%; height: auto; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .controls button {
+      background: #0f3460;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .controls button:disabled { opacity: 0.4; cursor: default; }
+    .page-info { font-size: 0.95rem; color: #aaa; min-width: 5rem; text-align: center; }
+
+    .stop-btn {
+      display: block;
+      width: 100%;
+      background: #c0392b;
+      color: white;
+      border: none;
+      padding: 1rem;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Admin</h1>
+    <span id="status" class="status waiting">Ühendamine...</span>
+  </header>
+
+  <div class="container">
+    <div id="setup" class="setup">
+      <p>Vali laulusõnade PDF fail, et alustada jagamist.</p>
+      <label class="file-btn">
+        Vali PDF
+        <input type="file" id="pdf-input" accept=".pdf">
+      </label>
+    </div>
+
+    <div id="sharing" class="sharing-panel">
+      <div class="qr-section">
+        <h2>Skänni QR kood, et vaadata</h2>
+        <div id="qrcode"></div>
+        <div class="room-code" id="room-code"></div>
+        <div class="viewer-count" id="viewer-count">0 vaatajat</div>
+        <div class="network-hint" id="network-hint" style="display:none"></div>
+      </div>
+
+      <div class="pdf-view">
+        <canvas id="pdf-canvas"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="prev-btn">◀ Eelmine</button>
+        <span class="page-info" id="page-info">1 / 1</span>
+        <button id="next-btn">Järgmine ▶</button>
+      </div>
+
+      <button class="stop-btn" id="stop-btn">Lõpeta jagamine</button>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const socket = io();
+    const statusEl = document.getElementById('status');
+    const setupEl = document.getElementById('setup');
+    const sharingEl = document.getElementById('sharing');
+    const pdfInput = document.getElementById('pdf-input');
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const pageInfo = document.getElementById('page-info');
+    const stopBtn = document.getElementById('stop-btn');
+    const viewerCountEl = document.getElementById('viewer-count');
+
+    let roomId = null;
+    let pdfDoc = null;
+    let currentPage = 1;
+    let totalPages = 0;
+    let renderTask = null;
+
+    async function getViewerBaseUrl() {
+      const origin = window.location.origin;
+      if (!origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+        return origin;
+      }
+
+      try {
+        const res = await fetch('/api/host-info');
+        const data = await res.json();
+        if (data.local.length > 0) {
+          document.getElementById('network-hint').style.display = 'block';
+          document.getElementById('network-hint').textContent =
+            'Telefonid peavad olema samas WiFi võrgus. QR link: ' + data.local[0];
+          return data.local[0];
+        }
+      } catch (_) {}
+
+      document.getElementById('network-hint').style.display = 'block';
+      document.getElementById('network-hint').textContent =
+        'Localhost ei tööta telefoniga. Ava admin leht võrgu IP aadressil.';
+      return origin;
+    }
+
+    socket.on('connect', () => {
+      statusEl.textContent = 'Ühendatud';
+      statusEl.classList.remove('waiting');
+    });
+
+    socket.on('disconnect', () => {
+      statusEl.textContent = 'Ühendus katkenud';
+      statusEl.classList.add('waiting');
+    });
+
+    socket.on('viewer-count', (count) => {
+      viewerCountEl.textContent = count === 1 ? '1 vaataja' : `${count} vaatajat`;
+    });
+
+    pdfInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      totalPages = pdfDoc.numPages;
+      currentPage = 1;
+
+      socket.emit('create-room', async ({ roomId: id }) => {
+        roomId = id;
+        document.getElementById('room-code').textContent = id;
+
+        const baseUrl = await getViewerBaseUrl();
+        const viewerUrl = `${baseUrl}/view/${id}`;
+        document.getElementById('qrcode').innerHTML = '';
+        new QRCode(document.getElementById('qrcode'), {
+          text: viewerUrl,
+          width: 180,
+          height: 180,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+        });
+
+        setupEl.style.display = 'none';
+        sharingEl.classList.add('active');
+        renderPage(currentPage);
+      });
+    });
+
+    async function renderPage(pageNum) {
+      if (!pdfDoc) return;
+
+      if (renderTask) {
+        renderTask.cancel();
+      }
+
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.5 });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      renderTask = page.render({ canvasContext: ctx, viewport });
+      await renderTask.promise;
+      renderTask = null;
+
+      pageInfo.textContent = `${pageNum} / ${totalPages}`;
+      prevBtn.disabled = pageNum <= 1;
+      nextBtn.disabled = pageNum >= totalPages;
+
+      sendFrame();
+    }
+
+    function sendFrame() {
+      if (!roomId) return;
+      const image = canvas.toDataURL('image/jpeg', 0.85);
+      socket.emit('frame', { roomId, image });
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderPage(currentPage);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderPage(currentPage);
+      }
+    });
+
+    stopBtn.addEventListener('click', () => {
+      if (roomId) {
+        socket.emit('stop-sharing', { roomId });
+      }
+      location.href = '/';
+    });
+  </script>
+</body>
+</html>

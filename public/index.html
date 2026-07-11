@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laulu ekraan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 2.5rem;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    p { color: #aaa; margin-bottom: 2rem; line-height: 1.5; }
+    a {
+      display: block;
+      padding: 1rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      transition: transform 0.15s;
+    }
+    a:hover { transform: scale(1.02); }
+    .admin-btn {
+      background: #e94560;
+      color: white;
+    }
+    .viewer-info {
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Laulu ekraan</h1>
+    <p>Jaga laulusõnu grupile. Admin valib PDF-i, teised skännivad QR koodi.</p>
+    <a href="/admin" class="admin-btn">Alusta jagamist (Admin)</a>
+    <p class="viewer-info">Vaatajana liitu QR koodi skännides admini ekraanilt.</p>
+  </div>
+</body>
+</html>

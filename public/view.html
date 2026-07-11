@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vaataja – Laulu ekraan</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #000;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #16213e;
+      padding: 0.6rem 1rem;
+      text-align: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .status { color: #4ecca3; }
+    .status.error { color: #e94560; }
+    .status.waiting { color: #f0a500; }
+
+    .screen {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      overflow: hidden;
+    }
+    #frame {
+      max-width: 100%;
+      max-height: calc(100vh - 3rem);
+      object-fit: contain;
+      background: white;
+      border-radius: 4px;
+    }
+
+    .message {
+      text-align: center;
+      padding: 2rem;
+      color: #888;
+      line-height: 1.6;
+    }
+    .message h2 { color: #eee; margin-bottom: 0.5rem; font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <span id="status" class="status waiting">Ühendamine...</span>
+  </header>
+
+  <div class="screen">
+    <div id="waiting" class="message">
+      <h2>Ootan admini pilti...</h2>
+      <p>Admin peab jagamist alustama ja valima PDF-i.</p>
+    </div>
+    <img id="frame" alt="Admini ekraan" style="display:none">
+  </div>
+
+  <script>
+    const roomId = window.location.pathname.split('/').pop();
+    const socket = io();
+    const statusEl = document.getElementById('status');
+    const frameEl = document.getElementById('frame');
+    const waitingEl = document.getElementById('waiting');
+
+    if (!roomId || roomId.length !== 6) {
+      statusEl.textContent = 'Vigane link';
+      statusEl.className = 'status error';
+      waitingEl.innerHTML = '<h2>Vigane link</h2><p>Skänni QR kood admini ekraanilt.</p>';
+    } else {
+      socket.on('connect', () => {
+        socket.emit('join-room', { roomId }, (res) => {
+          if (!res.success) {
+            statusEl.textContent = res.error;
+            statusEl.className = 'status error';
+            waitingEl.innerHTML = `<h2>Liitumine ebaõnnestus</h2><p>${res.error}</p>`;
+            return;
+          }
+          statusEl.textContent = `Ühendatud (tuba ${roomId})`;
+          statusEl.className = 'status';
+        });
+      });
+
+      socket.on('disconnect', () => {
+        statusEl.textContent = 'Ühendus katkenud';
+        statusEl.className = 'status waiting';
+      });
+
+      socket.on('frame', (image) => {
+        frameEl.src = image;
+        frameEl.style.display = 'block';
+        waitingEl.style.display = 'none';
+      });
+
+      socket.on('sharing-stopped', () => {
+        frameEl.style.display = 'none';
+        waitingEl.style.display = 'block';
+        waitingEl.innerHTML = '<h2>Jagamine lõppenud</h2><p>Admin lõpetas ekraani jagamise.</p>';
+        statusEl.textContent = 'Jagamine lõppenud';
+        statusEl.className = 'status error';
+      });
+    }
+  </script>
+</body>
+</html>
