@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Laulu ekraan</string>
+    <string name="start_sharing">Alusta jagamist</string>
+    <string name="stop_sharing">Lõpeta jagamine</string>
+    <string name="scan_qr">Skänni QR kood, et vaadata</string>
+    <string name="open_mobilesheets">Ava nüüd MobileSheets või muu rakendus</string>
+    <string name="connecting">Ühendamine serveriga…</string>
+    <string name="sharing_active">Ekraan jagamisel</string>
+    <string name="viewers">%1$d vaatajat</string>
+    <string name="notification_title">Ekraan jagamisel</string>
+    <string name="notification_text">Vaatajad näevad sinu ekraani</string>
+    <string name="server_url">https://laulu-ekraan.onrender.com</string>
+</resources>

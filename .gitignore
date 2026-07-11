@@ -2,3 +2,7 @@ node_modules/
 .android-build-cache/
 helindus/
 tablet-kiosk-android/
+laulu-ekraan-android/.gradle/
+laulu-ekraan-android/build/
+laulu-ekraan-android/app/build/
+laulu-ekraan-android/local.properties
